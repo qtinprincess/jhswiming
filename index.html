@@ -104,6 +104,9 @@ button.big{width:100%;min-height:48px;font-size:16px}
 button.stat{border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:0}
 button.stat:hover{outline:1px solid var(--lane)}
 button.stat span{color:var(--lane)}
+.feeline{font-size:14px;font-weight:700;color:var(--lane);background:var(--lane-soft);border-radius:8px;padding:8px 10px;text-align:center}
+.feeline.ok{color:var(--ok);background:var(--ok-soft)}
+.chip:disabled{opacity:.6}
 .cashbox{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg)}
 .srow{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--line);min-height:48px}
 .slist>.srow:first-child{border-top:none}
@@ -234,6 +237,9 @@ function totals(c){
 
 /* ---- private messages ---- */
 function greet(s){ return s.parent ? `${s.parent}您好 😊` : `您好 😊`; }
+function feeLine(n){
+  return n>=settings.groupSize ? `已滿 ${settings.groupSize} 人，每人調降為 ${settings.groupFee} 元` : `目前 ${n} 人，再 ${settings.groupSize-n} 人每人調降為 ${settings.groupFee} 元`;
+}
 function inviteText(c){
   const L = [`您好 😊`, `小柯教練加開課程，請問有要參加訓練嗎？`, ``,
     `📅 ${fmtDate(c.date)}`, `⏰ ${c.time}`, `📍 ${PLACE}`,
@@ -245,7 +251,7 @@ function inviteText(c){
 function payGeneric(c){
   const t = totals(c);
   const L = [`您好 😊`, `${fmtDate(c.date)} ${c.time} 的加課已幫孩子登記好了 ✅`, ``,
-    `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會降為每人 ${settings.groupFee} 元）`:""}`,
+    `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會調降為每人 ${settings.groupFee} 元）`:""}`,
     `繳費方式：${settings.payNote}`];
   if(c.note) L.push(`📝 提醒：${c.note}`);
   L.push(``, `付款後跟我說一聲就好，謝謝！🙏`);
@@ -256,7 +262,7 @@ function payText(c, s){
   const paid = s.method ? Number(s.paidAmt)||0 : 0;
   const owe = t.fee - paid;
   const L = [greet(s), `${s.name} ${fmtDate(c.date)} ${c.time} 的加課已幫您登記好了 ✅`, ``,
-    `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會降為每人 ${settings.groupFee} 元）`:""}`];
+    `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會調降為每人 ${settings.groupFee} 元）`:""}`];
   if(paid && owe>0) L.push(`之前已收 ${paid} 元，再麻煩補 ${owe} 元`);
   else if(paid && owe<0) L.push(`之前已收 ${paid} 元，會退您 ${-owe} 元`);
   else if(!paid) L.push(`繳費方式：${settings.payNote}`);
@@ -388,8 +394,8 @@ function renderSettings(v){
       <textarea id="s_sw" style="min-height:180px" placeholder="王小明｜小明媽媽&#10;林小美｜｜11:30前離開&#10;陳大寶">${esc((settings.swimmers||[]).join("\n"))}</textarea></label>
     <div class="grid2">
       <label>每人費用<input id="s_fee" type="number" inputmode="numeric" value="${esc(settings.fee)}"></label>
-      <label>滿幾人優惠<input id="s_gs" type="number" inputmode="numeric" value="${esc(settings.groupSize)}"></label>
-      <label>優惠後每人<input id="s_gf" type="number" inputmode="numeric" value="${esc(settings.groupFee)}"></label>
+      <label>滿幾人調降<input id="s_gs" type="number" inputmode="numeric" value="${esc(settings.groupSize)}"></label>
+      <label>調降後每人<input id="s_gf" type="number" inputmode="numeric" value="${esc(settings.groupFee)}"></label>
     </div>
     <label>時段選項（一行一個）<textarea id="s_times">${esc(settings.times.join("\n"))}</textarea></label>
     <label>備註選項（一行一個）<textarea id="s_notes">${esc(settings.notes.join("\n"))}</textarea></label>
@@ -425,9 +431,9 @@ function renderClass(v,c){
     </div>
     <div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">回覆登記</h2>
-        <span class="pill ${t.n>=settings.groupSize?"ok":""}">${t.n>=settings.groupSize?`滿 ${settings.groupSize} 人，每人 ${settings.groupFee}`:`再 ${left} 人降為 ${settings.groupFee}`}</span></div>
+        <span class="pill ${t.n>=settings.groupSize?"ok":""}">${t.n>=settings.groupSize?`滿 ${settings.groupSize} 人，每人 ${settings.groupFee}`:`再 ${left} 人調降為 ${settings.groupFee}`}</span></div>
       ${!roster.length?"":c.locked
-        ?`<div class="lockbar"><span class="grow">🔒 名單已確定：參加 ${t.n} 人</span>
+        ?`<div class="lockbar"><span class="grow">🔒 名單已確定：參加 ${t.n} 人，每人 ${t.fee} 元</span>
             ${route.askUnlock?`<button class="danger" id="unlockYes">確定修改</button><button id="unlockNo">取消</button>`:`<button id="unlock">修改名單</button>`}</div>`
         :`<div class="row">
             ${roster.every(s=>s.status==="yes")?`<button id="allNone">取消全選</button>`:`<button id="allYes">✓ 全選參加</button>`}
@@ -443,6 +449,7 @@ function renderClass(v,c){
           <button class="primary" data-memosave="${i}">儲存</button>
           ${c.locked?"":pendingDelete===i?`<button class="danger" data-delyes="${i}">確定移除</button><button data-delno="1">取消</button>`:`<button class="ghost danger" data-del="${i}">移除</button>`}
         </div>`:""}`).join("") || `<p class="empty">${roster.length?"這個分類目前沒有人。":`這堂課還沒有名單。<br><button class="primary" id="loadRoster" style="margin-top:8px">帶入隊員名單（${(settings.swimmers||[]).length} 位）</button>`}</p>`}</div>
+      ${roster.length?`<div class="feeline ${t.n>=settings.groupSize?"ok":""}">💰 ${feeLine(t.n)}</div>`:""}
       ${roster.length && !c.locked?`<button class="primary big" id="lockList">✓ 確定名單（參加 ${t.n} 人）</button>`:""}
       ${c.locked?"":`<details><summary class="muted">＋ 臨時加入名單外的小朋友</summary>
         <div class="row" style="margin-top:8px"><input id="manualName" style="flex:1 1 120px" placeholder="名字"><input id="manualMemo" style="flex:1 1 140px" placeholder="家長備註（選填）"><button id="addManual">加入</button></div></details>`}
@@ -455,15 +462,18 @@ function renderClass(v,c){
     </div>
     <div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">收款（${t.n} 人 × ${t.fee}）</h2><span class="pill ${t.unpaid.length?"warn":"ok"}">${t.unpaid.length?`未付 ${t.unpaid.length}`:"都付了"}</span></div>
-      <p class="muted" style="margin:0">收到錢點付款方式，點第二次取消。</p>
+      ${yes.length?(route.payEdit
+        ?`<p class="muted" style="margin:0">收到錢點付款方式，點第二次取消。登記完按最下面「暫存收款」鎖住。</p>`
+        :`<div class="lockbar"><span class="grow">🔒 收款已鎖定，避免誤按</span><button id="payEdit">登記收款</button></div>`):""}
       <div class="slist">${yes.map(({s,i})=>{ const paid=s.method?Number(s.paidAmt)||0:0; const diff=t.fee-paid;
         const info = [s.memo?`<small>${esc(s.memo)}</small>`:"", s.method?`<small class="${diff?"":"ok"}">${diff>0?`待補 ${diff}`:diff<0?`待退 ${-diff}`:`已付 ${paid}`}${s.paidAt?" · "+esc(s.paidAt):""}</small>`:""].join("");
         const extra = (s.method && diff!==0) ? `<div class="sextra">
-            ${s.method && diff!==0?`<button class="chip" data-settle="${i}">${diff>0?"已補齊":"已退款"}</button>`:""}</div>` : "";
+            ${s.method && diff!==0?`<button class="chip" data-settle="${i}" ${route.payEdit?"":"disabled"}>${diff>0?"已補齊":"已退款"}</button>`:""}</div>` : "";
         return `<div class="srow">
           <div class="sname"><b>${esc(s.name)}</b>${info}</div>
-          <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}">LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}">收現</button></div>
+          <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}" ${route.payEdit?"":"disabled"}>LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}" ${route.payEdit?"":"disabled"}>收現</button></div>
         </div>${extra}`; }).join("") || `<p class="empty">還沒有人確定參加。到「① 私訊統計」點「參加」後會出現在這裡。</p>`}</div>
+      ${yes.length && route.payEdit?`<button class="primary big" id="paySave">✓ 暫存收款（已收 ${t.n-t.unpaid.length}／${t.n} 人）</button>`:""}
       <p class="muted" style="margin:0">LINE Pay＝家長直接付給小柯教練；收現＝愛心家長收現金，結算時統一交給教練。</p>
     </div>`;
   } else {
@@ -509,7 +519,7 @@ function bindClass(c){
   const rm=$("#rmClass"); if(rm) rm.onclick=()=>{ route.confirmRemoveClass=true; render(); };
   const ry=$("#rmYes"); if(ry) ry.onclick=()=>{ deleteClasses([c.id]); route={view:"list"}; render(); toast("已刪除"); };
   const rn=$("#rmNo"); if(rn) rn.onclick=()=>{ route.confirmRemoveClass=false; render(); };
-  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; render(); });
+  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; route.payEdit=false; render(); });
   on("[data-filter]", b=>{ route.filter=b.dataset.filter; render(); });
   on("[data-copy]", ()=>copy(coachText(c)));
   const ay=$("#allYes"); if(ay) ay.onclick=()=>{ R.forEach(s=>{ if(s.status!=="no") s.status="yes"; }); saveClass(c); render(); toast(`已全選參加（${R.filter(s=>s.status==="yes").length} 位）`); };
@@ -528,11 +538,13 @@ function bindClass(c){
   on("[data-edit]", b=>{ const i=+b.dataset.edit; route.edit = route.edit===i ? null : i; pendingDelete=null; render(); const m=$("#memo_"+i); if(m) m.focus(); });
   on("[data-memosave]", b=>{ const i=+b.dataset.memosave; R[i].memo=$("#memo_"+i).value.trim(); route.edit=null; saveClass(c); render(); toast("備註已儲存"); });
   on("[data-st]", b=>{ if(c.locked) return; const s=R[+b.dataset.st]; s.status = s.status===b.dataset.v ? "" : b.dataset.v; saveClass(c); render(); });
-  on("[data-pay]", b=>{ const s=R[+b.dataset.pay]; const m=b.dataset.m;
+  const pe=$("#payEdit"); if(pe) pe.onclick=()=>{ route.payEdit=true; render(); };
+  const ps=$("#paySave"); if(ps) ps.onclick=()=>{ route.payEdit=false; saveClass(c); render(); toast("收款已暫存並鎖定"); window.scrollTo(0,0); };
+  on("[data-pay]", b=>{ if(!route.payEdit) return; const s=R[+b.dataset.pay]; const m=b.dataset.m;
     if(s.method===m){ s.method=""; s.paidAmt=0; s.paidAt=""; s.handed=false; }
     else { if(!s.method) s.paidAmt = totals(c).fee; s.method=m; const d=new Date(); s.paidAt=`${d.getMonth()+1}/${d.getDate()}`; if(m==="coach") s.handed=false; }
     saveClass(c); render(); });
-  on("[data-settle]", b=>{ const s=R[+b.dataset.settle]; s.paidAmt = totals(c).fee; saveClass(c); render(); toast("已更新金額"); });
+  on("[data-settle]", b=>{ if(!route.payEdit) return; const s=R[+b.dataset.settle]; s.paidAmt = totals(c).fee; saveClass(c); render(); toast("已更新金額"); });
   on("[data-del]", b=>{ pendingDelete=+b.dataset.del; render(); });
   on("[data-delyes]", b=>{ R.splice(+b.dataset.delyes,1); pendingDelete=null; route.edit=null; saveClass(c); render(); toast("已移除"); });
   on("[data-delno]", ()=>{ pendingDelete=null; render(); });
