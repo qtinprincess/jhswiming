@@ -104,6 +104,16 @@ button.big{width:100%;min-height:48px;font-size:16px}
 button.stat{border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:0}
 button.stat:hover{outline:1px solid var(--lane)}
 button.stat span{color:var(--lane)}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.step{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;min-height:84px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-align:center}
+.step b{font-size:15px}
+.step small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.stepnum{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--lane-soft);color:var(--lane);font-weight:700;font-size:14px}
+.step.done .stepnum{background:var(--ok-soft);color:var(--ok)}
+.step[aria-current="step"]{background:var(--lane);border-color:var(--lane);color:var(--surface)}
+.step[aria-current="step"] small{color:var(--surface);opacity:.85}
+.step[aria-current="step"] .stepnum{background:var(--surface);color:var(--lane)}
+.feeline small{display:block;font-weight:400;font-size:13px;margin-top:2px}
 .feeline{font-size:14px;font-weight:700;color:var(--lane);background:var(--lane-soft);border-radius:8px;padding:8px 10px;text-align:center}
 .feeline.ok{color:var(--ok);background:var(--ok-soft)}
 .chip:disabled{opacity:.6}
@@ -414,7 +424,11 @@ const ST = { "":"未回覆", asked:"未回覆", yes:"參加", no:"不參加" };
 
 function renderClass(v,c){
   const t = totals(c);
-  const tabs = [["invite","① 私訊統計"],["pay","② 收款"],["settle","③ 結算"]];
+  const paidN = t.n - t.unpaid.length;
+  const tabs = [
+    ["invite","1","私訊統計", c.locked?`✓ 參加 ${t.n} 人`:`參加 ${t.n} 人`, c.locked],
+    ["pay","2","收款", t.n?`已收 ${paidN}／${t.n}`:"等名單", t.n>0 && !t.unpaid.length],
+    ["settle","3","結算", t.cashToHand?`待交 ${money(t.cashToHand)}`:c.status==="done"?"已結案":"給教練", c.status==="done"]];
   const roster = c.roster||[];
   let body = "";
   if(route.tab==="invite"){
@@ -449,8 +463,9 @@ function renderClass(v,c){
           <button class="primary" data-memosave="${i}">儲存</button>
           ${c.locked?"":pendingDelete===i?`<button class="danger" data-delyes="${i}">確定移除</button><button data-delno="1">取消</button>`:`<button class="ghost danger" data-del="${i}">移除</button>`}
         </div>`:""}`).join("") || `<p class="empty">${roster.length?"這個分類目前沒有人。":`這堂課還沒有名單。<br><button class="primary" id="loadRoster" style="margin-top:8px">帶入隊員名單（${(settings.swimmers||[]).length} 位）</button>`}</p>`}</div>
-      ${roster.length?`<div class="feeline ${t.n>=settings.groupSize?"ok":""}">💰 ${feeLine(t.n)}</div>`:""}
+      ${roster.length?`<div class="feeline ${t.n>=settings.groupSize?"ok":""}">💰 ${feeLine(t.n)}${t.n<settings.groupSize && (t.counts[""]+t.counts.asked)?`<small>還有 ${t.counts[""]+t.counts.asked} 位未回覆，可以再追問看看</small>`:""}</div>`:""}
       ${roster.length && !c.locked?`<button class="primary big" id="lockList">✓ 確定名單（參加 ${t.n} 人）</button>`:""}
+      ${c.locked && t.n?`<button class="primary big" data-tab="pay">下一步：② 收款 →</button>`:""}
       ${c.locked?"":`<details><summary class="muted">＋ 臨時加入名單外的小朋友</summary>
         <div class="row" style="margin-top:8px"><input id="manualName" style="flex:1 1 120px" placeholder="名字"><input id="manualMemo" style="flex:1 1 140px" placeholder="家長備註（選填）"><button id="addManual">加入</button></div></details>`}
     </div>`;
@@ -473,6 +488,7 @@ function renderClass(v,c){
           <div class="sname"><b>${esc(s.name)}</b>${info}</div>
           <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}" ${route.payEdit?"":"disabled"}>LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}" ${route.payEdit?"":"disabled"}>收現</button></div>
         </div>${extra}`; }).join("") || `<p class="empty">還沒有人確定參加。到「① 私訊統計」點「參加」後會出現在這裡。</p>`}</div>
+      ${yes.length && !route.payEdit?`<button class="big" data-tab="settle">下一步：③ 結算 →</button>`:""}
       ${yes.length && route.payEdit?`<button class="primary big" id="paySave">✓ 暫存收款（已收 ${t.n-t.unpaid.length}／${t.n} 人）</button>`:""}
       <p class="muted" style="margin:0">LINE Pay＝家長直接付給小柯教練；收現＝愛心家長收現金，結算時統一交給教練。</p>
     </div>`;
@@ -506,7 +522,8 @@ function renderClass(v,c){
     <div class="panel" style="gap:6px"><h2>${fmtDate(c.date)} ${esc(c.time)}</h2>
       <div class="muted">${COACH} · ${PLACE}${c.note?" · "+esc(c.note):""}</div>
       <div class="row"><span class="pill">參加 ${t.n} 人</span><span class="pill">每人 ${t.fee}</span><span class="pill ok">已收 ${money(t.paid)}</span>${t.counts[""]+t.counts.asked?`<span class="pill warn">待回覆 ${t.counts[""]+t.counts.asked}</span>`:""}${c.status==="done"?`<span class="pill">已結案</span>`:""}</div></div>
-    <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${route.tab===k}">${l}</button>`).join("")}</div>
+    <nav class="steps" aria-label="操作步驟">${tabs.map(([k,n,l,sub,done])=>`<button class="step ${done?"done":""}" data-tab="${k}" aria-current="${route.tab===k?"step":"false"}">
+      <span class="stepnum">${done&&route.tab!==k?"✓":n}</span><b>${l}</b><small>${sub}</small></button>`).join("")}</nav>
     ${body}`;
   bindClass(c);
 }
@@ -519,7 +536,7 @@ function bindClass(c){
   const rm=$("#rmClass"); if(rm) rm.onclick=()=>{ route.confirmRemoveClass=true; render(); };
   const ry=$("#rmYes"); if(ry) ry.onclick=()=>{ deleteClasses([c.id]); route={view:"list"}; render(); toast("已刪除"); };
   const rn=$("#rmNo"); if(rn) rn.onclick=()=>{ route.confirmRemoveClass=false; render(); };
-  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; route.payEdit=false; render(); });
+  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; route.payEdit=false; render(); const st=document.querySelector(".steps"); if(st) st.scrollIntoView({block:"start"}); });
   on("[data-filter]", b=>{ route.filter=b.dataset.filter; render(); });
   on("[data-copy]", ()=>copy(coachText(c)));
   const ay=$("#allYes"); if(ay) ay.onclick=()=>{ R.forEach(s=>{ if(s.status!=="no") s.status="yes"; }); saveClass(c); render(); toast(`已全選參加（${R.filter(s=>s.status==="yes").length} 位）`); };
