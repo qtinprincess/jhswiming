@@ -95,6 +95,16 @@ textarea{min-height:110px;resize:vertical}
 .chip{font-size:13px;padding:4px 10px;min-height:34px;border-radius:99px}
 .chip.on{background:var(--lane-soft);border-color:var(--lane);color:var(--lane)}
 .slist{display:flex;flex-direction:column}
+pre.msg.preview{font-size:13px;line-height:1.5;padding:10px 12px}
+.lockbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:8px 10px;font-weight:700}
+.lockbar button{font-weight:400}
+.seg button:disabled{opacity:1;cursor:default}
+.seg button:disabled:not([aria-pressed="true"]){color:var(--line)}
+button.big{width:100%;min-height:48px;font-size:16px}
+button.stat{border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:0}
+button.stat:hover{outline:1px solid var(--lane)}
+button.stat span{color:var(--lane)}
+.cashbox{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg)}
 .srow{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--line);min-height:48px}
 .slist>.srow:first-child{border-top:none}
 .sname{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;border:none;background:none;padding:2px 0;min-height:40px;color:var(--ink);font-size:16px;line-height:1.25}
@@ -209,7 +219,7 @@ function totals(c){
     const amt = s.method ? (Number(s.paidAmt)||0) : 0;
     t.paid += amt;
     if(s.method==="coach") t.coach += amt;
-    if(s.method==="cash"){ t.cash += amt; if(s.handed) t.cashHanded += amt; }
+    if(s.method==="cash"){ t.cash += amt; t.cashNames = (t.cashNames||[]).concat(s.name); }
     if(!s.method) t.unpaid.push(s.name);
     else if(amt < fee) t.topUp.push({name:s.name, amt:fee-amt});
     else if(amt > fee) t.refund.push({name:s.name, amt:amt-fee, method:s.method});
@@ -217,6 +227,7 @@ function totals(c){
   // money paid by kids who later dropped out
   r.filter(s=>s.status!=="yes" && s.method).forEach(s=>t.refund.push({name:s.name, amt:Number(s.paidAmt)||0, method:s.method, dropped:true}));
   t.left = t.due - yes.reduce((a,s)=>a+Math.min(s.method?Number(s.paidAmt)||0:0, fee),0);
+  t.cashHanded = Math.min(Number(c.cashGivenAmt)||0, t.cash);
   t.cashToHand = t.cash - t.cashHanded;
   return t;
 }
@@ -257,9 +268,14 @@ function coachText(c){
   const t = totals(c);
   const yes = (c.roster||[]).filter(s=>s.status==="yes");
   const L = [`📋 ${fmtDate(c.date)} ${c.time} 加課（${PLACE}）`, ``, `參加 ${t.n} 人，每人 ${t.fee} 元，共 ${money(t.due)}`, ``];
-  yes.forEach((s,i)=>L.push(`${i+1}. ${s.name}${s.memo?"（"+s.memo+"）":""}　${s.method==="coach"?"LINE Pay 給教練 ✅":s.method==="cash"?"現金給愛心家長 ✅":"未付"}`));
-  L.push(``, `收款：LINE Pay 給教練 ${money(t.coach)}｜愛心家長現金 ${money(t.cash)}`);
-  if(t.cash) L.push(`現金已交教練 ${money(t.cashHanded)}，待交 ${money(t.cashToHand)}`);
+  yes.forEach((s,i)=>L.push(`${i+1}. ${s.name}${s.memo?"（"+s.memo+"）":""}　${s.method==="coach"?"LINE Pay ✅":s.method==="cash"?"收現 ✅":"未付"}`));
+  L.push(``, `💳 LINE Pay 直接付給教練：${money(t.coach)}`);
+  if(t.cash){
+    L.push(`💵 愛心家長收現：${money(t.cash)}（${(t.cashNames||[]).length} 人），統一交給教練`);
+    if(t.cashHanded) L.push(`　✅ 已於 ${c.cashGivenAt||""} 交給教練 ${money(t.cashHanded)}`);
+    if(t.cashToHand) L.push(`　⏳ 待交給教練 ${money(t.cashToHand)}`);
+  }
+  L.push(`合計已收：${money(t.paid)}`);
   if(t.unpaid.length) L.push(`未付：${t.unpaid.join("、")}`);
   if(t.topUp.length) L.push(`待補：${t.topUp.map(x=>x.name+" "+x.amt+"元").join("、")}`);
   if(t.refund.length) L.push(`待退：${t.refund.map(x=>x.name+" "+x.amt+"元"+(x.method==="coach"?"（教練退）":"（愛心家長退）")).join("、")}`);
@@ -404,60 +420,69 @@ function renderClass(v,c){
     const left = settings.groupSize - t.n;
     body = `<div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">私訊內容</h2><button class="primary" id="copyInvite">複製私訊</button></div>
-      <details><summary class="muted">看私訊內容</summary><pre class="msg" style="margin-top:8px">${esc(inviteText(c))}</pre></details>
+      <pre class="msg preview">${esc(inviteText(c))}</pre>
       <p class="muted" style="margin:0">複製一次，到 LINE 一位一位貼給家長；家長回覆後在下面點「參加」或「不參加」。</p>
     </div>
     <div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">回覆登記</h2>
         <span class="pill ${t.n>=settings.groupSize?"ok":""}">${t.n>=settings.groupSize?`滿 ${settings.groupSize} 人，每人 ${settings.groupFee}`:`再 ${left} 人降為 ${settings.groupFee}`}</span></div>
-      ${roster.length?`<div class="row">
-        ${roster.every(s=>s.status==="yes")
-          ?`<button id="allNone">取消全選</button>`
-          :`<button class="primary" id="allYes">✓ 全選參加</button>`}
-        <span class="muted grow" style="min-width:0">先全選，再把不參加的點「不參加」</span></div>`:""}
+      ${!roster.length?"":c.locked
+        ?`<div class="lockbar"><span class="grow">🔒 名單已確定：參加 ${t.n} 人</span>
+            ${route.askUnlock?`<button class="danger" id="unlockYes">確定修改</button><button id="unlockNo">取消</button>`:`<button id="unlock">修改名單</button>`}</div>`
+        :`<div class="row">
+            ${roster.every(s=>s.status==="yes")?`<button id="allNone">取消全選</button>`:`<button id="allYes">✓ 全選參加</button>`}
+            <span class="muted grow" style="min-width:0">暫存中，勾好後按「確定名單」</span></div>`}
       <div class="chips">${filters.map(([k,l,n])=>`<button class="chip ${f===k?"on":""}" data-filter="${k}">${l} ${n}</button>`).join("")}</div>
       <div class="slist">${shown.map(({s,i})=>`
         <div class="srow">
           <button class="sname" data-edit="${i}" aria-label="編輯 ${esc(s.name)} 的備註"><b>${esc(s.name)}</b>${s.memo?`<small>${esc(s.memo)}</small>`:`<small class="faint">＋備註</small>`}</button>
-          <div class="seg"><button class="yes" data-st="${i}" data-v="yes" aria-pressed="${s.status==="yes"}">參加</button><button class="no" data-st="${i}" data-v="no" aria-pressed="${s.status==="no"}">不參加</button></div>
+          <div class="seg"><button class="yes" data-st="${i}" data-v="yes" aria-pressed="${s.status==="yes"}" ${c.locked?"disabled":""}>參加</button><button class="no" data-st="${i}" data-v="no" aria-pressed="${s.status==="no"}" ${c.locked?"disabled":""}>不參加</button></div>
         </div>
         ${route.edit===i?`<div class="sedit">
           <input id="memo_${i}" value="${esc(s.memo||"")}" placeholder="家長備註，例：11:30前離開">
           <button class="primary" data-memosave="${i}">儲存</button>
-          ${pendingDelete===i?`<button class="danger" data-delyes="${i}">確定移除</button><button data-delno="1">取消</button>`:`<button class="ghost danger" data-del="${i}">移除</button>`}
+          ${c.locked?"":pendingDelete===i?`<button class="danger" data-delyes="${i}">確定移除</button><button data-delno="1">取消</button>`:`<button class="ghost danger" data-del="${i}">移除</button>`}
         </div>`:""}`).join("") || `<p class="empty">${roster.length?"這個分類目前沒有人。":`這堂課還沒有名單。<br><button class="primary" id="loadRoster" style="margin-top:8px">帶入隊員名單（${(settings.swimmers||[]).length} 位）</button>`}</p>`}</div>
-      <details><summary class="muted">＋ 臨時加入名單外的小朋友</summary>
-        <div class="row" style="margin-top:8px"><input id="manualName" style="flex:1 1 120px" placeholder="名字"><input id="manualMemo" style="flex:1 1 140px" placeholder="家長備註（選填）"><button id="addManual">加入</button></div></details>
+      ${roster.length && !c.locked?`<button class="primary big" id="lockList">✓ 確定名單（參加 ${t.n} 人）</button>`:""}
+      ${c.locked?"":`<details><summary class="muted">＋ 臨時加入名單外的小朋友</summary>
+        <div class="row" style="margin-top:8px"><input id="manualName" style="flex:1 1 120px" placeholder="名字"><input id="manualMemo" style="flex:1 1 140px" placeholder="家長備註（選填）"><button id="addManual">加入</button></div></details>`}
     </div>`;
   } else if(route.tab==="pay"){
     const yes = roster.map((s,i)=>({s,i})).filter(({s})=>s.status==="yes");
     body = `<div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">繳費通知</h2><button class="primary" id="copyPay">複製繳費私訊</button></div>
-      <details><summary class="muted">看私訊內容</summary><pre class="msg" style="margin-top:8px">${esc(payGeneric(c))}</pre></details>
+      <pre class="msg preview">${esc(payGeneric(c))}</pre>
     </div>
     <div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">收款（${t.n} 人 × ${t.fee}）</h2><span class="pill ${t.unpaid.length?"warn":"ok"}">${t.unpaid.length?`未付 ${t.unpaid.length}`:"都付了"}</span></div>
       <p class="muted" style="margin:0">收到錢點付款方式，點第二次取消。</p>
       <div class="slist">${yes.map(({s,i})=>{ const paid=s.method?Number(s.paidAmt)||0:0; const diff=t.fee-paid;
         const info = [s.memo?`<small>${esc(s.memo)}</small>`:"", s.method?`<small class="${diff?"":"ok"}">${diff>0?`待補 ${diff}`:diff<0?`待退 ${-diff}`:`已付 ${paid}`}${s.paidAt?" · "+esc(s.paidAt):""}</small>`:""].join("");
-        const extra = (s.method==="cash" || (s.method && diff!==0)) ? `<div class="sextra">
-            ${s.method==="cash"?`<button class="chip ${s.handed?"on":""}" data-hand="${i}">${s.handed?"✓ 現金已交教練":"現金未交教練"}</button>`:""}
+        const extra = (s.method && diff!==0) ? `<div class="sextra">
             ${s.method && diff!==0?`<button class="chip" data-settle="${i}">${diff>0?"已補齊":"已退款"}</button>`:""}</div>` : "";
         return `<div class="srow">
           <div class="sname"><b>${esc(s.name)}</b>${info}</div>
-          <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}">LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}">現金</button></div>
+          <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}">LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}">收現</button></div>
         </div>${extra}`; }).join("") || `<p class="empty">還沒有人確定參加。到「① 私訊統計」點「參加」後會出現在這裡。</p>`}</div>
-      <p class="muted" style="margin:0">LINE Pay＝付給小柯教練；現金＝交給愛心家長。</p>
+      <p class="muted" style="margin:0">LINE Pay＝家長直接付給小柯教練；收現＝愛心家長收現金，結算時統一交給教練。</p>
     </div>`;
   } else {
     body = `<div class="panel"><h2>結算</h2>
       <div class="stats">
-        <div class="stat"><b>${t.n}</b><span>參加人數</span></div>
+        <button class="stat link" data-goto="invite">
+          <b>${t.n}</b><span>參加人數 ›</span></button>
         <div class="stat"><b>${money(t.due)}</b><span>應收（每人 ${t.fee}）</span></div>
-        <div class="stat"><b>${money(t.coach)}</b><span>教練 LINE Pay</span></div>
-        <div class="stat"><b>${money(t.cash)}</b><span>愛心家長現金</span></div>
+        <button class="stat link" data-goto="pay"><b>${money(t.coach)}</b><span>教練 LINE Pay ›</span></button>
+        <button class="stat link" data-goto="pay"><b>${money(t.cash)}</b><span>愛心家長收現 ›</span></button>
       </div>
-      ${t.cashToHand?`<div class="notice">手上還有現金 ${money(t.cashToHand)} 要交給小柯教練。交完到「② 收款」點「現金已交教練」。</div>`:""}
+      ${t.cash?`<div class="cashbox">
+          <div><b>💵 收現 ${money(t.cash)} 統一交給小柯教練</b>
+            <div class="muted">${esc((t.cashNames||[]).join("、"))}</div></div>
+          ${t.cashToHand
+            ?`<div class="row"><span class="grow">${t.cashHanded?`已交 ${money(t.cashHanded)}，還要交 `:"待交 "}<b>${money(t.cashToHand)}</b></span>
+                ${route.askGive?`<button class="primary" id="giveYes">確定已交</button><button id="giveNo">取消</button>`:`<button class="primary" id="give">✓ 已交給教練</button>`}</div>`
+            :`<div class="row"><span class="grow pill ok">✅ ${esc(c.cashGivenAt||"")} 已全部交給教練</span><button class="ghost" id="ungive">取消</button></div>`}
+        </div>`:""}
       ${t.unpaid.length?`<div class="notice">未付：${esc(t.unpaid.join("、"))}</div>`:""}
       ${t.topUp.length?`<div class="notice">待補：${esc(t.topUp.map(x=>x.name+" "+x.amt+" 元").join("、"))}</div>`:""}
       ${t.refund.length?`<div class="notice">待退：${esc(t.refund.map(x=>x.name+" "+x.amt+" 元"+(x.dropped?"（取消參加）":"")).join("、"))}</div>`:""}
@@ -484,22 +509,30 @@ function bindClass(c){
   const rm=$("#rmClass"); if(rm) rm.onclick=()=>{ route.confirmRemoveClass=true; render(); };
   const ry=$("#rmYes"); if(ry) ry.onclick=()=>{ deleteClasses([c.id]); route={view:"list"}; render(); toast("已刪除"); };
   const rn=$("#rmNo"); if(rn) rn.onclick=()=>{ route.confirmRemoveClass=false; render(); };
-  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; render(); });
+  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; render(); });
   on("[data-filter]", b=>{ route.filter=b.dataset.filter; render(); });
   on("[data-copy]", ()=>copy(coachText(c)));
   const ay=$("#allYes"); if(ay) ay.onclick=()=>{ R.forEach(s=>{ if(s.status!=="no") s.status="yes"; }); saveClass(c); render(); toast(`已全選參加（${R.filter(s=>s.status==="yes").length} 位）`); };
   const an=$("#allNone"); if(an) an.onclick=()=>{ R.forEach(s=>{ if(s.status==="yes" && !s.method) s.status=""; }); saveClass(c); render(); toast("已取消全選"); };
+  const lk=$("#lockList"); if(lk) lk.onclick=()=>{ c.locked=true; route.edit=null; pendingDelete=null; saveClass(c); render(); toast(`名單已確定：參加 ${totals(c).n} 人`); };
+  const ul=$("#unlock"); if(ul) ul.onclick=()=>{ route.askUnlock=true; render(); };
+  const uy=$("#unlockYes"); if(uy) uy.onclick=()=>{ c.locked=false; route.askUnlock=false; saveClass(c); render(); };
+  const un=$("#unlockNo"); if(un) un.onclick=()=>{ route.askUnlock=false; render(); };
+  on("[data-goto]", b=>{ route.tab=b.dataset.goto; if(b.dataset.goto==="invite") route.filter="yes"; render(); window.scrollTo(0,0); });
+  const gv=$("#give"); if(gv) gv.onclick=()=>{ route.askGive=true; render(); };
+  const gn=$("#giveNo"); if(gn) gn.onclick=()=>{ route.askGive=false; render(); };
+  const gy=$("#giveYes"); if(gy) gy.onclick=()=>{ const d=new Date(); c.cashGivenAmt=totals(c).cash; c.cashGivenAt=`${d.getMonth()+1}/${d.getDate()}`; route.askGive=false; saveClass(c); render(); toast("已記錄：現金交給教練"); };
+  const ug=$("#ungive"); if(ug) ug.onclick=()=>{ c.cashGivenAmt=0; c.cashGivenAt=""; saveClass(c); render(); };
   const ci=$("#copyInvite"); if(ci) ci.onclick=()=>copy(inviteText(c), "私訊已複製，到 LINE 貼給家長");
   const cpy=$("#copyPay"); if(cpy) cpy.onclick=()=>copy(payGeneric(c), "繳費私訊已複製");
   on("[data-edit]", b=>{ const i=+b.dataset.edit; route.edit = route.edit===i ? null : i; pendingDelete=null; render(); const m=$("#memo_"+i); if(m) m.focus(); });
   on("[data-memosave]", b=>{ const i=+b.dataset.memosave; R[i].memo=$("#memo_"+i).value.trim(); route.edit=null; saveClass(c); render(); toast("備註已儲存"); });
-  on("[data-st]", b=>{ const s=R[+b.dataset.st]; s.status = s.status===b.dataset.v ? "" : b.dataset.v; saveClass(c); render(); });
+  on("[data-st]", b=>{ if(c.locked) return; const s=R[+b.dataset.st]; s.status = s.status===b.dataset.v ? "" : b.dataset.v; saveClass(c); render(); });
   on("[data-pay]", b=>{ const s=R[+b.dataset.pay]; const m=b.dataset.m;
     if(s.method===m){ s.method=""; s.paidAmt=0; s.paidAt=""; s.handed=false; }
     else { if(!s.method) s.paidAmt = totals(c).fee; s.method=m; const d=new Date(); s.paidAt=`${d.getMonth()+1}/${d.getDate()}`; if(m==="coach") s.handed=false; }
     saveClass(c); render(); });
   on("[data-settle]", b=>{ const s=R[+b.dataset.settle]; s.paidAmt = totals(c).fee; saveClass(c); render(); toast("已更新金額"); });
-  on("[data-hand]", b=>{ const s=R[+b.dataset.hand]; s.handed=!s.handed; saveClass(c); render(); });
   on("[data-del]", b=>{ pendingDelete=+b.dataset.del; render(); });
   on("[data-delyes]", b=>{ R.splice(+b.dataset.delyes,1); pendingDelete=null; route.edit=null; saveClass(c); render(); toast("已移除"); });
   on("[data-delno]", ()=>{ pendingDelete=null; render(); });
@@ -540,7 +573,7 @@ function renderHistory(v){
       <div class="stat"><b>${sum.n}</b><span>加課堂數</span></div>
       <div class="stat"><b>${sum.heads}</b><span>參加人次</span></div>
       <div class="stat"><b>${money(sum.coach)}</b><span>教練 LINE Pay</span></div>
-      <div class="stat"><b>${money(sum.cash)}</b><span>愛心家長現金</span></div></div>
+      <div class="stat"><b>${money(sum.cash)}</b><span>愛心家長收現</span></div></div>
     <div>${list.slice().reverse().map(c=>{ const t=totals(c); return `<button class="panel cls" data-open="${c.id}" style="margin-top:8px">
       <div class="date"><b>${+c.date.slice(5,7)}/${+c.date.slice(8)}</b><span>週${WD[new Date(c.date+"T00:00").getDay()]}</span></div>
       <div style="min-width:0"><b>${esc(c.time)}</b><div class="muted">${t.n} 人 × ${t.fee} · 已收 ${money(t.paid)}</div></div>
@@ -583,11 +616,11 @@ async function backup(){
 }
 function exportCsv(){
   const q = x => `"${String(x ?? "").replace(/"/g,'""')}"`;
-  const rows = [["日期","星期","時段","備註","小朋友","家長","家長備註","回覆","當堂每人費用","付款方式","已收金額","收款日","現金已交教練"]];
+  const rows = [["日期","星期","時段","備註","小朋友","家長","家長備註","回覆","當堂每人費用","付款方式","已收金額","收款日","收現交教練"]];
   classes.forEach(c=>{ const t=totals(c);
     (c.roster||[]).filter(s=>s.status||s.method).forEach(s=>rows.push([c.date, "週"+WD[new Date(c.date+"T00:00").getDay()], c.time, c.note, s.name, s.parent, s.memo||"",
-      ST[s.status||""], s.status==="yes"?t.fee:"", s.method==="coach"?"小柯教練 LINE Pay":s.method==="cash"?"愛心家長現金":"",
-      s.method?Number(s.paidAmt)||0:"", s.paidAt, s.method==="cash"?(s.handed?"是":"否"):""])); });
+      ST[s.status||""], s.status==="yes"?t.fee:"", s.method==="coach"?"LINE Pay（教練）":s.method==="cash"?"收現（愛心家長）":"",
+      s.method?Number(s.paidAmt)||0:"", s.paidAt, s.method==="cash"?(c.cashGivenAt?"已交("+c.cashGivenAt+")":"未交"):""])); });
   giveFile(`泳隊加課記錄_${ymd(Date.now())}.csv`, "﻿"+rows.map(r=>r.map(q).join(",")).join("\r\n"), "text/csv");
 }
 function restore(e){
