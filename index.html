@@ -113,6 +113,10 @@ button.stat span{color:var(--lane)}
 .step[aria-current="step"]{background:var(--lane);border-color:var(--lane);color:var(--surface)}
 .step[aria-current="step"] small{color:var(--surface);opacity:.85}
 .step[aria-current="step"] .stepnum{background:var(--surface);color:var(--lane)}
+.act{flex:0 0 auto;display:flex;gap:6px}
+.act button{min-height:40px;padding:6px 12px;font-size:14px}
+.act .x{padding:6px 10px}
+button.paid{flex:0 0 auto;min-height:40px;padding:6px 12px;font-size:14px;background:var(--ok-soft);color:var(--ok);border:1px solid transparent;border-radius:10px;font-weight:700}
 .feeline small{display:block;font-weight:400;font-size:13px;margin-top:2px}
 .feeline{font-size:14px;font-weight:700;color:var(--lane);background:var(--lane-soft);border-radius:8px;padding:8px 10px;text-align:center}
 .feeline.ok{color:var(--ok);background:var(--ok-soft)}
@@ -153,7 +157,7 @@ summary{cursor:pointer}
 <body>
 <div class="wrap" id="app">
   <header>
-    <h1>中小泳隊加課<small>小柯教練 · 中和國小 · 開課 → 私訊統計 → 收款 → 結算</small></h1>
+    <h1>中小泳隊加課<small>中和國小 · 開課 → 私訊統計 → 收款 → 結算</small></h1>
     <div class="row">
       <button id="btnSettings" class="ghost">⚙ 常用設定</button>
       <button id="btnHistory" class="ghost">📊 歷史與備份</button>
@@ -172,7 +176,9 @@ summary{cursor:pointer}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const WD = "日一二三四五六";
-const COACH = "小柯教練", PLACE = "中和國小";
+const COACHES = ["小柯教練","柯教練"], PLACE = "中和國小";
+const coachOf = c => (c && c.coach) || COACHES[0];
+const payNoteFor = c => (settings.payNote||"").replace(/小?柯教練/g, coachOf(c));
 const fmtDate = d => { if(!d) return ""; const t=new Date(d+"T00:00"); return `${t.getMonth()+1}/${t.getDate()}（${WD[t.getDay()]}）`; };
 const money = n => "$" + (Number(n)||0).toLocaleString("zh-TW");
 const todayStr = () => { const t=new Date(); t.setMinutes(t.getMinutes()-t.getTimezoneOffset()); return t.toISOString().slice(0,10); };
@@ -251,7 +257,7 @@ function feeLine(n){
   return n>=settings.groupSize ? `已滿 ${settings.groupSize} 人，每人調降為 ${settings.groupFee} 元` : `目前 ${n} 人，再 ${settings.groupSize-n} 人每人調降為 ${settings.groupFee} 元`;
 }
 function inviteText(c){
-  const L = [`您好 😊`, `小柯教練加開課程，請問有要參加訓練嗎？`, ``,
+  const L = [`您好 😊`, `${coachOf(c)}加開課程，請問有要參加訓練嗎？`, ``,
     `📅 ${fmtDate(c.date)}`, `⏰ ${c.time}`, `📍 ${PLACE}`,
     `💰 每人 ${settings.fee} 元（滿 ${settings.groupSize} 人每人 ${settings.groupFee} 元）`];
   if(c.note) L.push(`📝 ${c.note}`);
@@ -262,7 +268,7 @@ function payGeneric(c){
   const t = totals(c);
   const L = [`您好 😊`, `${fmtDate(c.date)} ${c.time} 的加課已幫孩子登記好了 ✅`, ``,
     `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會調降為每人 ${settings.groupFee} 元）`:""}`,
-    `繳費方式：${settings.payNote}`];
+    `繳費方式：${payNoteFor(c)}`];
   if(c.note) L.push(`📝 提醒：${c.note}`);
   L.push(``, `付款後跟我說一聲就好，謝謝！🙏`);
   return L.join("\n");
@@ -275,7 +281,7 @@ function payText(c, s){
     `目前 ${t.n} 人參加，每人 ${t.fee} 元${t.n<settings.groupSize?`（滿 ${settings.groupSize} 人會調降為每人 ${settings.groupFee} 元）`:""}`];
   if(paid && owe>0) L.push(`之前已收 ${paid} 元，再麻煩補 ${owe} 元`);
   else if(paid && owe<0) L.push(`之前已收 ${paid} 元，會退您 ${-owe} 元`);
-  else if(!paid) L.push(`繳費方式：${settings.payNote}`);
+  else if(!paid) L.push(`繳費方式：${payNoteFor(c)}`);
   if(c.note) L.push(`📝 提醒：${c.note}`);
   L.push(``, `付款後跟我說一聲就好，謝謝！🙏`);
   return L.join("\n");
@@ -283,7 +289,7 @@ function payText(c, s){
 function coachText(c){
   const t = totals(c);
   const yes = (c.roster||[]).filter(s=>s.status==="yes");
-  const L = [`📋 ${fmtDate(c.date)} ${c.time} 加課（${PLACE}）`, ``, `參加 ${t.n} 人，每人 ${t.fee} 元，共 ${money(t.due)}`, ``];
+  const L = [`📋 ${fmtDate(c.date)} ${c.time} ${coachOf(c)}加課（${PLACE}）`, ``, `參加 ${t.n} 人，每人 ${t.fee} 元，共 ${money(t.due)}`, ``];
   yes.forEach((s,i)=>L.push(`${i+1}. ${s.name}${s.memo?"（"+s.memo+"）":""}　${s.method==="coach"?"LINE Pay ✅":s.method==="cash"?"收現 ✅":"未付"}`));
   L.push(``, `💳 LINE Pay 直接付給教練：${money(t.coach)}`);
   if(t.cash){
@@ -312,7 +318,7 @@ function renderList(v){
   if(!classes.length){
     v.innerHTML = `<div class="panel empty"><h2>還沒有加課</h2>
       <p>第一次使用，先到「⚙ 常用設定」貼上隊員名單（可以加家長稱呼）。</p>
-      <p>之後小柯教練說有空，按「＋ 開新加課」選日期和時段，就能複製私訊、統計誰要參加。</p></div>`;
+      <p>之後教練說有空，按「＋ 開新加課」選日期和時段，就能複製私訊、統計誰要參加。</p></div>`;
     return;
   }
   const open = classes.filter(c=>c.status!=="done"), done = classes.filter(c=>c.status==="done");
@@ -322,7 +328,7 @@ function renderList(v){
       : t.unpaid.length ? `<span class="pill warn">未收 ${t.unpaid.length} 人</span>`
       : waiting ? `<span class="pill">待回覆 ${waiting}</span>` : `<span class="pill">進行中</span>`;
     const inner = `<div class="date"><b>${d.getMonth()+1}/${d.getDate()}</b><span>週${WD[d.getDay()]}</span></div>
-      <div style="min-width:0"><div><b>${esc(c.time)}</b></div>
+      <div style="min-width:0"><div><b>${esc(c.time)}</b> <span class="muted">${coachOf(c)}</span></div>
         <div class="muted">參加 ${t.n} 人 · 每人 ${t.fee} · 已收 ${money(t.paid)}</div></div>`;
     if(route.manage){ const on = selected.has(c.id);
       return `<label class="panel cls pick ${on?"picked":""}" for="pick_${c.id}"><input type="checkbox" id="pick_${c.id}" data-pick="${c.id}" ${on?"checked":""}>${inner}</label>`; }
@@ -365,9 +371,10 @@ function renderForm(v){
   const c = editing || { date:todayStr(), time:settings.times[0]||"", note:"", deadline:"" };
   v.innerHTML = `<form class="panel" id="classForm">
     <h2>${editing?"修改加課":"開新加課"}</h2>
-    <p class="muted">教練：${COACH}　地點：${PLACE}　費用：每人 ${settings.fee} 元，滿 ${settings.groupSize} 人自動變每人 ${settings.groupFee} 元</p>
+    <p class="muted">地點：${PLACE}　費用：每人 ${settings.fee} 元，滿 ${settings.groupSize} 人自動變每人 ${settings.groupFee} 元</p>
     <div class="grid2">
       <label>日期<input id="f_date" type="date" required value="${esc(c.date)}"></label>
+      <label>教練<select id="f_coach">${COACHES.map(x=>`<option value="${x}" ${x===coachOf(c)?"selected":""}>${x}</option>`).join("")}</select></label>
       <label>時段<select id="f_time">${optionList(settings.times, c.time)}</select>
         <input id="f_time_new" placeholder="輸入新時段，例：13:00–15:00" hidden></label>
       <label>備註<select id="f_note">${optionList(settings.notes, c.note, "（無）")}</select>
@@ -386,7 +393,7 @@ function renderForm(v){
     if(time==="__add"){ time=$("#f_time_new").value.trim(); if(!time){ toast("請輸入新時段"); return; } if(!settings.times.includes(time)){ settings.times.push(time); changed=true; } }
     if(note==="__add"){ note=$("#f_note_new").value.trim(); if(note && !settings.notes.includes(note)){ settings.notes.push(note); changed=true; } }
     if(changed) saveSettings();
-    const data = { date:$("#f_date").value, time, note, deadline:$("#f_deadline").value.trim() };
+    const data = { date:$("#f_date").value, coach:$("#f_coach").value, time, note, deadline:$("#f_deadline").value.trim() };
     if(editing){ Object.assign(editing,data); saveClass(editing); route={...route,view:"class"}; }
     else {
       const id = "c"+Date.now().toString(36);
@@ -477,20 +484,26 @@ function renderClass(v,c){
     </div>
     <div class="panel" style="gap:8px">
       <div class="row"><h2 class="grow">收款（${t.n} 人 × ${t.fee}）</h2><span class="pill ${t.unpaid.length?"warn":"ok"}">${t.unpaid.length?`未付 ${t.unpaid.length}`:"都付了"}</span></div>
-      ${yes.length?(route.payEdit
-        ?`<p class="muted" style="margin:0">收到錢點付款方式，點第二次取消。登記完按最下面「暫存收款」鎖住。</p>`
-        :`<div class="lockbar"><span class="grow">🔒 收款已鎖定，避免誤按</span><button id="payEdit">登記收款</button></div>`):""}
+      ${yes.length?`<p class="muted" style="margin:0">點付款方式後再按「確定」才會記錄，記好的人會自動上鎖 🔒。</p>`:""}
       <div class="slist">${yes.map(({s,i})=>{ const paid=s.method?Number(s.paidAmt)||0:0; const diff=t.fee-paid;
         const info = [s.memo?`<small>${esc(s.memo)}</small>`:"", s.method?`<small class="${diff?"":"ok"}">${diff>0?`待補 ${diff}`:diff<0?`待退 ${-diff}`:`已付 ${paid}`}${s.paidAt?" · "+esc(s.paidAt):""}</small>`:""].join("");
         const extra = (s.method && diff!==0) ? `<div class="sextra">
-            ${s.method && diff!==0?`<button class="chip" data-settle="${i}" ${route.payEdit?"":"disabled"}>${diff>0?"已補齊":"已退款"}</button>`:""}</div>` : "";
+            ${s.method && diff!==0?`<button class="chip" data-settle="${i}">${diff>0?"已補齊":"已退款"}</button>`:""}</div>` : "";
+        const M = { coach:"LINE Pay", cash:"收現" };
+        const ask = route.payAsk && route.payAsk.i===i ? route.payAsk : null;
+        const right = ask
+            ? `<div class="act"><button class="primary" data-payok="${i}">確定 ${M[ask.m]} ${t.fee}</button><button class="x" data-paycancel="1" aria-label="取消">✕</button></div>`
+          : s.method && route.unlockAsk===i
+            ? `<div class="act"><button class="danger" data-unlockyes="${i}">改收款</button><button class="x" data-unlockno="1" aria-label="取消">✕</button></div>`
+          : s.method
+            ? `<button class="paid" data-unlock="${i}" aria-label="${esc(s.name)} 已收款，點一下可修改">🔒 ${M[s.method]}</button>`
+            : `<div class="seg"><button class="yes" data-pay="${i}" data-m="coach">LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash">收現</button></div>`;
         return `<div class="srow">
           <div class="sname"><b>${esc(s.name)}</b>${info}</div>
-          <div class="seg"><button class="yes" data-pay="${i}" data-m="coach" aria-pressed="${s.method==="coach"}" ${route.payEdit?"":"disabled"}>LINE Pay</button><button class="yes" data-pay="${i}" data-m="cash" aria-pressed="${s.method==="cash"}" ${route.payEdit?"":"disabled"}>收現</button></div>
+          ${right}
         </div>${extra}`; }).join("") || `<p class="empty">還沒有人確定參加。到「① 私訊統計」點「參加」後會出現在這裡。</p>`}</div>
-      ${yes.length && !route.payEdit?`<button class="big" data-tab="settle">下一步：③ 結算 →</button>`:""}
-      ${yes.length && route.payEdit?`<button class="primary big" id="paySave">✓ 暫存收款（已收 ${t.n-t.unpaid.length}／${t.n} 人）</button>`:""}
-      <p class="muted" style="margin:0">LINE Pay＝家長直接付給小柯教練；收現＝愛心家長收現金，結算時統一交給教練。</p>
+      ${yes.length?`<button class="big" data-tab="settle">下一步：③ 結算 →</button>`:""}
+      <p class="muted" style="margin:0">LINE Pay＝家長直接付給${coachOf(c)}；收現＝愛心家長收現金，結算時統一交給教練。</p>
     </div>`;
   } else {
     body = `<div class="panel"><h2>結算</h2>
@@ -502,7 +515,7 @@ function renderClass(v,c){
         <button class="stat link" data-goto="pay"><b>${money(t.cash)}</b><span>愛心家長收現 ›</span></button>
       </div>
       ${t.cash?`<div class="cashbox">
-          <div><b>💵 收現 ${money(t.cash)} 統一交給小柯教練</b>
+          <div><b>💵 收現 ${money(t.cash)} 統一交給${coachOf(c)}</b>
             <div class="muted">${esc((t.cashNames||[]).join("、"))}</div></div>
           ${t.cashToHand
             ?`<div class="row"><span class="grow">${t.cashHanded?`已交 ${money(t.cashHanded)}，還要交 `:"待交 "}<b>${money(t.cashToHand)}</b></span>
@@ -513,14 +526,14 @@ function renderClass(v,c){
       ${t.topUp.length?`<div class="notice">待補：${esc(t.topUp.map(x=>x.name+" "+x.amt+" 元").join("、"))}</div>`:""}
       ${t.refund.length?`<div class="notice">待退：${esc(t.refund.map(x=>x.name+" "+x.amt+" 元"+(x.dropped?"（取消參加）":"")).join("、"))}</div>`:""}
       <pre class="msg">${esc(coachText(c))}</pre>
-      <div class="row"><button class="primary" data-copy="coach">複製名單給小柯教練</button>
+      <div class="row"><button class="primary" data-copy="coach">複製名單給${coachOf(c)}</button>
         <button id="toggleDone">${c.status==="done"?"重新開啟":"結案"}</button></div>
     </div>`;
   }
   v.innerHTML = `<div class="row"><button class="ghost" id="back">← 全部加課</button><span class="grow"></span><button class="ghost" id="editClass">修改資料</button>
       ${route.confirmRemoveClass?`<span class="confirm">刪除整堂加課？<button class="danger" id="rmYes">刪除</button><button id="rmNo">取消</button></span>`:`<button class="ghost danger" id="rmClass">刪除</button>`}</div>
     <div class="panel" style="gap:6px"><h2>${fmtDate(c.date)} ${esc(c.time)}</h2>
-      <div class="muted">${COACH} · ${PLACE}${c.note?" · "+esc(c.note):""}</div>
+      <div class="muted">${coachOf(c)} · ${PLACE}${c.note?" · "+esc(c.note):""}</div>
       <div class="row"><span class="pill">參加 ${t.n} 人</span><span class="pill">每人 ${t.fee}</span><span class="pill ok">已收 ${money(t.paid)}</span>${t.counts[""]+t.counts.asked?`<span class="pill warn">待回覆 ${t.counts[""]+t.counts.asked}</span>`:""}${c.status==="done"?`<span class="pill">已結案</span>`:""}</div></div>
     <nav class="steps" aria-label="操作步驟">${tabs.map(([k,n,l,sub,done])=>`<button class="step ${done?"done":""}" data-tab="${k}" aria-current="${route.tab===k?"step":"false"}">
       <span class="stepnum">${done&&route.tab!==k?"✓":n}</span><b>${l}</b><small>${sub}</small></button>`).join("")}</nav>
@@ -536,7 +549,7 @@ function bindClass(c){
   const rm=$("#rmClass"); if(rm) rm.onclick=()=>{ route.confirmRemoveClass=true; render(); };
   const ry=$("#rmYes"); if(ry) ry.onclick=()=>{ deleteClasses([c.id]); route={view:"list"}; render(); toast("已刪除"); };
   const rn=$("#rmNo"); if(rn) rn.onclick=()=>{ route.confirmRemoveClass=false; render(); };
-  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; route.payEdit=false; render(); const st=document.querySelector(".steps"); if(st) st.scrollIntoView({block:"start"}); });
+  on("[data-tab]", b=>{ route.tab=b.dataset.tab; pendingDelete=null; route.askUnlock=false; route.askGive=false; route.payAsk=null; route.unlockAsk=null; render(); const st=document.querySelector(".steps"); if(st) st.scrollIntoView({block:"start"}); });
   on("[data-filter]", b=>{ route.filter=b.dataset.filter; render(); });
   on("[data-copy]", ()=>copy(coachText(c)));
   const ay=$("#allYes"); if(ay) ay.onclick=()=>{ R.forEach(s=>{ if(s.status!=="no") s.status="yes"; }); saveClass(c); render(); toast(`已全選參加（${R.filter(s=>s.status==="yes").length} 位）`); };
@@ -555,13 +568,19 @@ function bindClass(c){
   on("[data-edit]", b=>{ const i=+b.dataset.edit; route.edit = route.edit===i ? null : i; pendingDelete=null; render(); const m=$("#memo_"+i); if(m) m.focus(); });
   on("[data-memosave]", b=>{ const i=+b.dataset.memosave; R[i].memo=$("#memo_"+i).value.trim(); route.edit=null; saveClass(c); render(); toast("備註已儲存"); });
   on("[data-st]", b=>{ if(c.locked) return; const s=R[+b.dataset.st]; s.status = s.status===b.dataset.v ? "" : b.dataset.v; saveClass(c); render(); });
-  const pe=$("#payEdit"); if(pe) pe.onclick=()=>{ route.payEdit=true; render(); };
-  const ps=$("#paySave"); if(ps) ps.onclick=()=>{ route.payEdit=false; saveClass(c); render(); toast("收款已暫存並鎖定"); window.scrollTo(0,0); };
-  on("[data-pay]", b=>{ if(!route.payEdit) return; const s=R[+b.dataset.pay]; const m=b.dataset.m;
+  on("[data-pay]", b=>{ route.payAsk={ i:+b.dataset.pay, m:b.dataset.m }; route.unlockAsk=null; render(); });
+  on("[data-paycancel]", ()=>{ route.payAsk=null; render(); });
+  on("[data-payok]", b=>{ const s=R[+b.dataset.payok]; const m=route.payAsk.m; route.payAsk=null;
+    s.method=m; s.paidAmt=totals(c).fee; const d=new Date(); s.paidAt=`${d.getMonth()+1}/${d.getDate()}`;
+    saveClass(c); render(); toast(`${s.name} 已收款 🔒`); });
+  on("[data-unlock]", b=>{ route.unlockAsk=+b.dataset.unlock; route.payAsk=null; render(); });
+  on("[data-unlockno]", ()=>{ route.unlockAsk=null; render(); });
+  on("[data-unlockyes]", b=>{ const s=R[+b.dataset.unlockyes]; s.method=""; s.paidAmt=0; s.paidAt=""; route.unlockAsk=null; saveClass(c); render(); toast(`已取消 ${s.name} 的收款，請重新登記`); });
+  on("[data-oldpay]", b=>{ const s=R[+b.dataset.oldpay]; const m=b.dataset.m;
     if(s.method===m){ s.method=""; s.paidAmt=0; s.paidAt=""; s.handed=false; }
     else { if(!s.method) s.paidAmt = totals(c).fee; s.method=m; const d=new Date(); s.paidAt=`${d.getMonth()+1}/${d.getDate()}`; if(m==="coach") s.handed=false; }
     saveClass(c); render(); });
-  on("[data-settle]", b=>{ if(!route.payEdit) return; const s=R[+b.dataset.settle]; s.paidAmt = totals(c).fee; saveClass(c); render(); toast("已更新金額"); });
+  on("[data-settle]", b=>{ const s=R[+b.dataset.settle]; s.paidAmt = totals(c).fee; saveClass(c); render(); toast("已更新金額"); });
   on("[data-del]", b=>{ pendingDelete=+b.dataset.del; render(); });
   on("[data-delyes]", b=>{ R.splice(+b.dataset.delyes,1); pendingDelete=null; route.edit=null; saveClass(c); render(); toast("已移除"); });
   on("[data-delno]", ()=>{ pendingDelete=null; render(); });
@@ -645,9 +664,9 @@ async function backup(){
 }
 function exportCsv(){
   const q = x => `"${String(x ?? "").replace(/"/g,'""')}"`;
-  const rows = [["日期","星期","時段","備註","小朋友","家長","家長備註","回覆","當堂每人費用","付款方式","已收金額","收款日","收現交教練"]];
+  const rows = [["日期","星期","教練","時段","備註","小朋友","家長","家長備註","回覆","當堂每人費用","付款方式","已收金額","收款日","收現交教練"]];
   classes.forEach(c=>{ const t=totals(c);
-    (c.roster||[]).filter(s=>s.status||s.method).forEach(s=>rows.push([c.date, "週"+WD[new Date(c.date+"T00:00").getDay()], c.time, c.note, s.name, s.parent, s.memo||"",
+    (c.roster||[]).filter(s=>s.status||s.method).forEach(s=>rows.push([c.date, "週"+WD[new Date(c.date+"T00:00").getDay()], coachOf(c), c.time, c.note, s.name, s.parent, s.memo||"",
       ST[s.status||""], s.status==="yes"?t.fee:"", s.method==="coach"?"LINE Pay（教練）":s.method==="cash"?"收現（愛心家長）":"",
       s.method?Number(s.paidAmt)||0:"", s.paidAt, s.method==="cash"?(c.cashGivenAt?"已交("+c.cashGivenAt+")":"未交"):""])); });
   giveFile(`泳隊加課記錄_${ymd(Date.now())}.csv`, "﻿"+rows.map(r=>r.map(q).join(",")).join("\r\n"), "text/csv");
